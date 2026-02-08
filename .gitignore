@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Kotlin
+.kotlin/
+*.class
+*.log
+*.kotlin_module
+
+# Android
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# iOS
+iosApp/Pods/
+iosApp/.symlinks/
+iosApp/Flutter/
+*.xcworkspace
+*.xcuserdata
+DerivedData/
+
+# Other
+*.hprof
+captures/
+.externalNativeBuild/
+.cxx/

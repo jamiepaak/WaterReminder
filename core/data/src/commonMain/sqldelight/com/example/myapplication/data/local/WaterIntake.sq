@@ -1,0 +1,44 @@
+CREATE TABLE WaterIntakeEntity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER NOT NULL,
+    drankAt TEXT NOT NULL,
+    note TEXT
+);
+
+selectAll:
+SELECT * FROM WaterIntakeEntity ORDER BY drankAt DESC;
+
+selectByDate:
+SELECT * FROM WaterIntakeEntity
+WHERE date(drankAt) = date(?)
+ORDER BY drankAt DESC;
+
+selectByDateRange:
+SELECT * FROM WaterIntakeEntity
+WHERE date(drankAt) BETWEEN date(?) AND date(?)
+ORDER BY drankAt DESC;
+
+getTodayTotal:
+SELECT COALESCE(SUM(amount), 0) AS total FROM WaterIntakeEntity
+WHERE date(drankAt) = date('now', 'localtime');
+
+getTodayCount:
+SELECT COUNT(*) AS count FROM WaterIntakeEntity
+WHERE date(drankAt) = date('now', 'localtime');
+
+getDailySummary:
+SELECT date(drankAt) AS date, SUM(amount) AS total, COUNT(*) AS count
+FROM WaterIntakeEntity
+WHERE date(drankAt) BETWEEN date(?) AND date(?)
+GROUP BY date(drankAt)
+ORDER BY date(drankAt) DESC;
+
+insert:
+INSERT INTO WaterIntakeEntity(amount, drankAt, note)
+VALUES (?, ?, ?);
+
+deleteById:
+DELETE FROM WaterIntakeEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM WaterIntakeEntity;
