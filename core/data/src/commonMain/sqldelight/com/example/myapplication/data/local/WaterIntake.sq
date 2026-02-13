@@ -42,3 +42,13 @@ DELETE FROM WaterIntakeEntity WHERE id = ?;
 
 deleteAll:
 DELETE FROM WaterIntakeEntity;
+
+getHourlyBreakdown:
+SELECT
+    CAST(strftime('%H', drankAt) AS INTEGER) AS hour,
+    COALESCE(SUM(amount), 0) AS totalAmount,
+    COUNT(*) AS intakeCount
+FROM WaterIntakeEntity
+WHERE date(drankAt) = date(?)
+GROUP BY CAST(strftime('%H', drankAt) AS INTEGER)
+ORDER BY hour;

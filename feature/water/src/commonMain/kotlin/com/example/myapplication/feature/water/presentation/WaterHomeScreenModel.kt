@@ -1,6 +1,7 @@
 package com.example.myapplication.feature.water.presentation
 
 import com.example.myapplication.domain.usecase.water.AddWaterIntakeUseCase
+import com.example.myapplication.domain.usecase.water.GetHourlyIntakesUseCase
 import com.example.myapplication.domain.usecase.water.GetTodaySummaryUseCase
 import com.example.myapplication.domain.usecase.water.GetWaterGoalUseCase
 import com.example.myapplication.domain.usecase.water.GetWeeklySummaryUseCase
@@ -10,6 +11,7 @@ import com.example.myapplication.presentation.base.BaseScreenModel
 class WaterHomeScreenModel(
     private val getTodaySummaryUseCase: GetTodaySummaryUseCase,
     private val getWeeklySummaryUseCase: GetWeeklySummaryUseCase,
+    private val getHourlyIntakesUseCase: GetHourlyIntakesUseCase,
     private val getWaterGoalUseCase: GetWaterGoalUseCase,
     private val addWaterIntakeUseCase: AddWaterIntakeUseCase,
     private val waterRepository: WaterRepository
@@ -58,6 +60,12 @@ class WaterHomeScreenModel(
         launchScope {
             getWeeklySummaryUseCase().collect { weekly ->
                 updateState { copy(weeklySummary = weekly) }
+            }
+        }
+
+        launchScope {
+            getHourlyIntakesUseCase().collect { hourly ->
+                updateState { copy(hourlyIntakes = hourly) }
             }
         }
     }

@@ -45,9 +45,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,9 +65,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import com.example.myapplication.domain.model.DailyWaterSummary
+import com.example.myapplication.domain.model.HourlyWaterIntake
+import com.example.myapplication.feature.water.presentation.WaterHomeEffect
 import com.example.myapplication.feature.water.presentation.WaterHomeEvent
 import com.example.myapplication.feature.water.presentation.WaterHomeScreenModel
 import com.example.myapplication.ui.component.AdBanner
@@ -75,6 +85,21 @@ class WaterHomeScreen : Screen {
     override fun Content() {
         val screenModel = getScreenModel<WaterHomeScreenModel>()
         val state by screenModel.uiState.collectAsState()
+        val navigator = LocalNavigator.currentOrThrow
+
+        LaunchedEffect(Unit) {
+            screenModel.effect.collect { effect ->
+                when (effect) {
+                    is WaterHomeEffect.NavigateToSettings -> {
+                        navigator.push(WaterSettingsScreen())
+                    }
+                    is WaterHomeEffect.NavigateToHistory -> {
+                        navigator.push(WaterWeeklyReportScreen())
+                    }
+                    is WaterHomeEffect.ShowMessage -> { /* TODO: snackbar */ }
+                }
+            }
+        }
 
         Scaffold(
             topBar = {
@@ -85,6 +110,13 @@ class WaterHomeScreen : Screen {
                         titleContentColor = Color.White
                     ),
                     actions = {
+                        IconButton(onClick = { screenModel.onEvent(WaterHomeEvent.NavigateToHistory) }) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = "주간 리포트",
+                                tint = Color.White
+                            )
+                        }
                         IconButton(onClick = { screenModel.onEvent(WaterHomeEvent.NavigateToSettings) }) {
                             Icon(
                                 Icons.Default.Settings,
@@ -136,6 +168,13 @@ class WaterHomeScreen : Screen {
                     // 주간 통계
                     item {
                         WeeklyStatsCard(weeklySummary = state.weeklySummary)
+                    }
+
+                    // 시간대별 섭취 그래프
+                    if (state.hourlyIntakes.isNotEmpty()) {
+                        item {
+                            HourlyIntakeChart(hourlyIntakes = state.hourlyIntakes)
+                        }
                     }
 
                     // 오늘 기록
@@ -427,6 +466,158 @@ private fun IntakeItem(
 
             TextButton(onClick = onDelete) {
                 Text("삭제", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HourlyIntakeChart(hourlyIntakes: List<HourlyWaterIntake>) {
+    val maxAmount = hourlyIntakes.maxOfOrNull { it.totalAmount }?.coerceAtLeast(1) ?: 1
+    var selectedHour by remember { mutableStateOf<Int?>(null) }
+    val animationProgress by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 800)
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "오늘 시간대별 섭취",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            // 선택된 시간대 상세 정보
+            val selected = selectedHour?.let { h -> hourlyIntakes.find { it.hour == h } }
+            if (selected != null && selected.totalAmount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${selected.hour}시",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "${selected.totalAmount}ml · ${selected.intakeCount}회",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 차트 영역
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val barWidth = size.width / 24f
+                            val tappedHour = (offset.x / barWidth).toInt().coerceIn(0, 23)
+                            selectedHour = if (selectedHour == tappedHour) null else tappedHour
+                        }
+                    }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val barWidth = size.width / 24f
+                    val chartHeight = size.height - 20f
+
+                    // 배경 그리드 라인
+                    for (i in 1..3) {
+                        val y = chartHeight * (1f - i / 4f)
+                        drawLine(
+                            color = Color(0xFFEEEEEE),
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1f
+                        )
+                    }
+
+                    hourlyIntakes.forEach { intake ->
+                        if (intake.totalAmount > 0) {
+                            val targetHeight = (intake.totalAmount.toFloat() / maxAmount) * chartHeight
+                            val barHeight = targetHeight * animationProgress
+                            val x = intake.hour * barWidth
+                            val isSelected = selectedHour == intake.hour
+                            val barColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF42A5F5)
+                            val cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+
+                            drawRoundRect(
+                                color = barColor,
+                                topLeft = Offset(x + 2f, chartHeight - barHeight),
+                                size = Size(barWidth - 4f, barHeight),
+                                cornerRadius = cornerRadius
+                            )
+                        }
+                    }
+
+                    // 바닥 라인
+                    drawLine(
+                        color = Color(0xFFBDBDBD),
+                        start = Offset(0f, chartHeight),
+                        end = Offset(size.width, chartHeight),
+                        strokeWidth = 1f
+                    )
+
+                    // 선택된 바 인디케이터
+                    selectedHour?.let { hour ->
+                        val x = hour * barWidth + barWidth / 2
+                        drawCircle(
+                            color = Color(0xFF1565C0),
+                            radius = 3f,
+                            center = Offset(x, chartHeight + 10f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 시간 라벨 (0, 6, 12, 18, 24)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf("0시", "6시", "12시", "18시", "24시").forEachIndexed { index, label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF757575),
+                        modifier = Modifier.weight(1f),
+                        textAlign = if (index == 4) TextAlign.End
+                        else if (index == 0) TextAlign.Start
+                        else TextAlign.Center
+                    )
+                }
+            }
+
+            // 총 섭취량 표시
+            val totalToday = hourlyIntakes.sumOf { it.totalAmount }
+            if (totalToday > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "가장 많이 마신 시간: ${hourlyIntakes.maxByOrNull { it.totalAmount }?.hour}시",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF757575)
+                )
             }
         }
     }

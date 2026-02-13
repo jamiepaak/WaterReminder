@@ -2,6 +2,7 @@ package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.domain.model.DailyWaterSummary
+import com.example.myapplication.domain.model.HourlyWaterIntake
 import com.example.myapplication.domain.model.WaterGoal
 import com.example.myapplication.domain.model.WaterIntake
 import com.example.myapplication.domain.repository.WaterRepository
@@ -124,6 +125,25 @@ class WaterRepositoryImpl(
         }.reversed()
 
         emit(result)
+    }
+
+    override fun getTodayHourlyIntakes(): Flow<List<HourlyWaterIntake>> = flow {
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+        val hourlyData = withContext(Dispatchers.IO) {
+            waterIntakeQueries.getHourlyBreakdown(today).executeAsList().map { row ->
+                HourlyWaterIntake(
+                    hour = row.hour?.toInt() ?: 0,
+                    totalAmount = row.totalAmount.toInt(),
+                    intakeCount = row.intakeCount.toInt()
+                )
+            }
+        }
+        // 24시간 전체를 채워서 반환 (데이터 없는 시간은 0)
+        val hourlyMap = hourlyData.associateBy { it.hour }
+        val fullDay = (0..23).map { hour ->
+            hourlyMap[hour] ?: HourlyWaterIntake(hour = hour, totalAmount = 0, intakeCount = 0)
+        }
+        emit(fullDay)
     }
 
     override fun getGoal(): Flow<WaterGoal> = flow {

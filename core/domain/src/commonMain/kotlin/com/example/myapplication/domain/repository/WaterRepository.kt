@@ -1,6 +1,7 @@
 package com.example.myapplication.domain.repository
 
 import com.example.myapplication.domain.model.DailyWaterSummary
+import com.example.myapplication.domain.model.HourlyWaterIntake
 import com.example.myapplication.domain.model.WaterGoal
 import com.example.myapplication.domain.model.WaterIntake
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,9 @@ interface WaterRepository {
     // Daily Summary
     fun getTodaySummary(): Flow<DailyWaterSummary>
     fun getWeeklySummary(): Flow<List<DailyWaterSummary>>
+
+    // Hourly Breakdown
+    fun getTodayHourlyIntakes(): Flow<List<HourlyWaterIntake>>
 
     // Goal Settings
     fun getGoal(): Flow<WaterGoal>
