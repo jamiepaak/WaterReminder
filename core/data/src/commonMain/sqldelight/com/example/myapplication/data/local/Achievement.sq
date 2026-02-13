@@ -1,0 +1,21 @@
+CREATE TABLE AchievementEntity (
+    type TEXT PRIMARY KEY NOT NULL,
+    isUnlocked INTEGER NOT NULL DEFAULT 0,
+    unlockedAt TEXT
+);
+
+getAll:
+SELECT * FROM AchievementEntity;
+
+getUnlocked:
+SELECT * FROM AchievementEntity WHERE isUnlocked = 1;
+
+unlockAchievement:
+INSERT OR REPLACE INTO AchievementEntity(type, isUnlocked, unlockedAt)
+VALUES (?, 1, ?);
+
+isUnlocked:
+SELECT isUnlocked FROM AchievementEntity WHERE type = ?;
+
+resetAll:
+DELETE FROM AchievementEntity;

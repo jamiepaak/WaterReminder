@@ -1,0 +1,24 @@
+CREATE TABLE UserLevelEntity (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    totalExp INTEGER NOT NULL DEFAULT 0,
+    CHECK (id = 1)
+);
+
+-- Initialize with default
+INSERT OR IGNORE INTO UserLevelEntity (id, totalExp) VALUES (1, 0);
+
+getUserLevel:
+SELECT * FROM UserLevelEntity WHERE id = 1;
+
+addExp:
+UPDATE UserLevelEntity
+SET totalExp = totalExp + ?
+WHERE id = 1;
+
+getTotalExp:
+SELECT totalExp FROM UserLevelEntity WHERE id = 1;
+
+resetExp:
+UPDATE UserLevelEntity
+SET totalExp = 0
+WHERE id = 1;

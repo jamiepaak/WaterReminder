@@ -1,0 +1,27 @@
+CREATE TABLE DailyChallengeEntity (
+    date TEXT PRIMARY KEY NOT NULL,
+    type TEXT NOT NULL,
+    currentValue INTEGER NOT NULL DEFAULT 0,
+    isCompleted INTEGER NOT NULL DEFAULT 0
+);
+
+getToday:
+SELECT * FROM DailyChallengeEntity WHERE date = date('now', 'localtime');
+
+insert:
+INSERT OR REPLACE INTO DailyChallengeEntity(date, type, currentValue, isCompleted)
+VALUES (?, ?, ?, ?);
+
+updateProgress:
+UPDATE DailyChallengeEntity
+SET currentValue = ?
+WHERE date = ?;
+
+completeChallenge:
+UPDATE DailyChallengeEntity
+SET isCompleted = 1
+WHERE date = ?;
+
+deleteOld:
+DELETE FROM DailyChallengeEntity
+WHERE date < date('now', 'localtime', '-7 days');

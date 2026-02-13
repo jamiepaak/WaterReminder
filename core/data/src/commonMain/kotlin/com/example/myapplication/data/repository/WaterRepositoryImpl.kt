@@ -1,8 +1,12 @@
 package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.local.AppDatabase
+import com.example.myapplication.domain.model.Achievement
+import com.example.myapplication.domain.model.AchievementType
+import com.example.myapplication.domain.model.DailyChallenge
 import com.example.myapplication.domain.model.DailyWaterSummary
 import com.example.myapplication.domain.model.HourlyWaterIntake
+import com.example.myapplication.domain.model.UserLevel
 import com.example.myapplication.domain.model.WaterGoal
 import com.example.myapplication.domain.model.WaterIntake
 import com.example.myapplication.domain.repository.WaterRepository
@@ -25,6 +29,9 @@ class WaterRepositoryImpl(
 
     private val waterIntakeQueries = database.waterIntakeQueries
     private val waterGoalQueries = database.waterGoalQueries
+    private val userLevelQueries = database.userLevelQueries
+    private val achievementQueries = database.achievementQueries
+    private val dailyChallengeQueries = database.dailyChallengeQueries
 
     override fun getTodayIntakes(): Flow<List<WaterIntake>> = flow {
         val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
@@ -171,5 +178,126 @@ class WaterRepositoryImpl(
             reminderEndHour = goal.reminderEndHour.toLong(),
             cupSizeMl = goal.cupSizeMl.toLong()
         )
+    }
+    
+    // Gamification - Level & Exp
+    override fun getUserLevel(): Flow<UserLevel> = flow {
+        val totalExp = withContext(Dispatchers.IO) {
+            userLevelQueries.getTotalExp().executeAsOne().toInt()
+        }
+        emit(UserLevel.fromTotalExp(totalExp))
+    }
+    
+    override suspend fun addExp(amount: Int) = withContext(Dispatchers.IO) {
+        userLevelQueries.addExp(amount.toLong())
+    }
+    
+    override suspend fun getTotalExp(): Int = withContext(Dispatchers.IO) {
+        userLevelQueries.getTotalExp().executeAsOne().toInt()
+    }
+    
+    // Gamification - Achievements
+    override fun getAchievements(): Flow<List<Achievement>> = flow {
+        val unlockedMap = withContext(Dispatchers.IO) {
+            achievementQueries.getAll().executeAsList()
+                .associate { entity ->
+                    AchievementType.valueOf(entity.type) to (entity.isUnlocked == 1L to entity.unlockedAt)
+                }
+        }
+        
+        val achievements = Achievement.getAllAchievements().map { achievement ->
+            val (isUnlocked, unlockedAt) = unlockedMap[achievement.type] ?: (false to null)
+            achievement.copy(
+                isUnlocked = isUnlocked,
+                unlockedAt = unlockedAt?.let { 
+                    LocalDateTime.parse(it).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+                }
+            )
+        }
+        emit(achievements)
+    }
+    
+    override suspend fun unlockAchievement(type: AchievementType) = withContext(Dispatchers.IO) {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).toString()
+        achievementQueries.unlockAchievement(type.name, now)
+        
+        // 배지 획득 시 경험치 보상
+        val achievement = Achievement.getAllAchievements().find { it.type == type }
+        achievement?.let { addExp(it.expReward) }
+    }
+    
+    override suspend fun checkAndUnlockAchievements() = withContext(Dispatchers.IO) {
+        // 첫 물 마시기
+        val totalIntakes = waterIntakeQueries.selectAll().executeAsList().size
+        if (totalIntakes == 1) {
+            unlockAchievement(AchievementType.FIRST_DRINK)
+        }
+        
+        // 총 물 마신 양 체크
+        val totalMl = waterIntakeQueries.selectAll().executeAsList().sumOf { it.amount }.toInt()
+        when {
+            totalMl >= 1_000_000 -> unlockAchievement(AchievementType.TOTAL_WATER_1000L)
+            totalMl >= 100_000 -> unlockAchievement(AchievementType.TOTAL_WATER_100L)
+            totalMl >= 10_000 -> unlockAchievement(AchievementType.TOTAL_WATER_10L)
+        }
+        
+        // 레벨 10 달성
+        val totalExp = getTotalExp()
+        val level = UserLevel.fromTotalExp(totalExp).level
+        if (level >= 10) {
+            unlockAchievement(AchievementType.HYDRATION_MASTER)
+        }
+    }
+    
+    // Gamification - Daily Challenge
+    override fun getTodayChallenge(): Flow<DailyChallenge?> = flow {
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+        
+        val entity = withContext(Dispatchers.IO) {
+            dailyChallengeQueries.getToday().executeAsOneOrNull()
+        }
+        
+        if (entity == null) {
+            // 오늘 챌린지가 없으면 새로 생성
+            val dayOfWeek = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).dayOfWeek.value
+            val newChallenge = DailyChallenge.generateDailyChallenge(dayOfWeek)
+            withContext(Dispatchers.IO) {
+                dailyChallengeQueries.insert(
+                    date = today,
+                    type = newChallenge.type.name,
+                    currentValue = 0L,
+                    isCompleted = 0L
+                )
+            }
+            emit(newChallenge)
+        } else {
+            // 기존 챌린지 반환
+            val dayOfWeek = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).dayOfWeek.value
+            val baseChallenge = DailyChallenge.generateDailyChallenge(dayOfWeek)
+            emit(
+                baseChallenge.copy(
+                    currentValue = entity.currentValue.toInt(),
+                    isCompleted = entity.isCompleted == 1L
+                )
+            )
+        }
+    }
+    
+    override suspend fun updateChallengeProgress(currentValue: Int) = withContext(Dispatchers.IO) {
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+        dailyChallengeQueries.updateProgress(currentValue.toLong(), today)
+    }
+    
+    override suspend fun completeChallenge() = withContext(Dispatchers.IO) {
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+        dailyChallengeQueries.completeChallenge(today)
+        
+        // 챌린지 완료 시 경험치 보상
+        val challenge = dailyChallengeQueries.getToday().executeAsOneOrNull()
+        challenge?.let {
+            val dayOfWeek = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).dayOfWeek.value
+            val baseChallenge = DailyChallenge.generateDailyChallenge(dayOfWeek)
+            addExp(baseChallenge.expReward)
+        }
     }
 }

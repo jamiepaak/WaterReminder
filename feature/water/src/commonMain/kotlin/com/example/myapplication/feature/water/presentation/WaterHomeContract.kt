@@ -1,7 +1,10 @@
 package com.example.myapplication.feature.water.presentation
 
+import com.example.myapplication.domain.model.Achievement
+import com.example.myapplication.domain.model.DailyChallenge
 import com.example.myapplication.domain.model.DailyWaterSummary
 import com.example.myapplication.domain.model.HourlyWaterIntake
+import com.example.myapplication.domain.model.UserLevel
 import com.example.myapplication.domain.model.WaterGoal
 import com.example.myapplication.domain.model.WaterIntake
 import com.example.myapplication.presentation.mvi.UiEffect
@@ -14,6 +17,9 @@ data class WaterHomeState(
     val weeklySummary: List<DailyWaterSummary> = emptyList(),
     val hourlyIntakes: List<HourlyWaterIntake> = emptyList(),
     val goal: WaterGoal = WaterGoal(),
+    val userLevel: UserLevel = UserLevel(),
+    val todayChallenge: DailyChallenge? = null,
+    val recentAchievements: List<Achievement> = emptyList(),
     val isLoading: Boolean = true,
     val showAddDialog: Boolean = false,
     val customAmount: String = ""
@@ -29,10 +35,13 @@ sealed interface WaterHomeEvent : UiEvent {
     data object AddCustomAmount : WaterHomeEvent
     data object NavigateToSettings : WaterHomeEvent
     data object NavigateToHistory : WaterHomeEvent
+    data object NavigateToAchievements : WaterHomeEvent
 }
 
 sealed interface WaterHomeEffect : UiEffect {
     data object NavigateToSettings : WaterHomeEffect
     data object NavigateToHistory : WaterHomeEffect
+    data object NavigateToAchievements : WaterHomeEffect
     data class ShowMessage(val message: String) : WaterHomeEffect
+    data class ShowAchievementUnlocked(val achievement: Achievement) : WaterHomeEffect
 }
